@@ -1,4 +1,4 @@
-package core.business
+package core.util
 
 import redis.RedisClient
 
@@ -8,6 +8,8 @@ import scala.language.postfixOps
 
 /**
  * Created by v962867 on 10/25/15.
+ *
+ * A trip simulator to publish trip events to Redis
  */
 object Simulator {
 
