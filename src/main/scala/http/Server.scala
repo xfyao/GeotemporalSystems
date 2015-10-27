@@ -6,7 +6,6 @@ import core.business.{Controller, QueryHandler}
 import core.model.{Event, Position}
 import org.json4s._
 import org.json4s.native.Serialization.write
-import org.slf4j.LoggerFactory
 import spray.httpx.Json4sSupport
 import spray.routing.HttpService
 
@@ -19,11 +18,9 @@ object Json4sProtocol extends Json4sSupport {
 
 case class Return(code: String, msg: Option[String], ret: Option[String])
 
-trait Server extends HttpService {
+trait Server extends HttpService with HttpLogger {
 
   import Json4sProtocol._
-
-  val logger =  LoggerFactory.getLogger(this.getClass)
 
   // subscribe to Redis messag
   val channels = Seq("geoevent")

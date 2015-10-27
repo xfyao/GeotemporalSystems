@@ -3,14 +3,11 @@ package core.util
 import ch.hsr.geohash.GeoHash
 import ch.hsr.geohash.util.{BoundingBoxGeoHashIterator, TwoGeoHashBoundingBox}
 import core.model.Position
-import org.slf4j.LoggerFactory
 
 /**
  * Created by v962867 on 10/24/15.
  */
-object GeoHelper {
-
-  val logger = LoggerFactory.getLogger(this.getClass)
+trait GeoHelper {
 
   def characterPrecision: Int = 5
 
@@ -58,18 +55,18 @@ object GeoHelper {
   def getGeoHashListInRec(bottomLeft: Position, topRight: Position): List[String] = {
 
     //based on distance (km) to dynamically choose the geohash precision
-    val dist = GeoHelper.distance(bottomLeft, topRight)
+    val dist = distance(bottomLeft, topRight)
 
     val precision = dist match {
-      case x if x < 80 => GeoHelper.characterPrecision
+      case x if x < 80 => characterPrecision
       case x if x < 200 => 4
       case x if x < 800 => 3
       case x if x < 2000 => 2
       case _ => 1
     }
 
-    val geoHashBL = GeoHelper.geoHashObj(bottomLeft.lat, bottomLeft.lng, precision)
-    val geoHashTR = GeoHelper.geoHashObj(topRight.lat, topRight.lng, precision)
+    val geoHashBL = geoHashObj(bottomLeft.lat, bottomLeft.lng, precision)
+    val geoHashTR = geoHashObj(topRight.lat, topRight.lng, precision)
 
     val boundBox = new TwoGeoHashBoundingBox(geoHashBL, geoHashTR)
     val boundingBoxIter = new BoundingBoxGeoHashIterator(boundBox)
@@ -89,9 +86,9 @@ object GeoHelper {
 
     var ret = List[String]()
 
-    val geoHashBL = GeoHelper.geoHashObj(bottomLeft.lat, bottomLeft.lng)
+    val geoHashBL = geoHashObj(bottomLeft.lat, bottomLeft.lng)
 
-    val geoHashTR = GeoHelper.geoHashObj(topRight.lat, topRight.lng)
+    val geoHashTR = geoHashObj(topRight.lat, topRight.lng)
 
     var current = geoHashBL.getNorthernNeighbour
 
@@ -110,7 +107,6 @@ object GeoHelper {
 
     // go back one and continue go Southern
     current = current.getWesternNeighbour
-    logger.debug(s"it shoud be the top right one, check ${current.toBase32} ?= ${geoHashTR.toBase32}")
     current = current.getSouthernNeighbour
     while(allGeoHashList.contains(current.toBase32)) {
       ret :+= current.toBase32
@@ -125,7 +121,6 @@ object GeoHelper {
     }
 
     current = current.getEasternNeighbour
-    logger.debug(s"it shoud be the bottom left one, check ${current.toBase32} ?= ${geoHashBL.toBase32}")
 
     // if boundary list is empty, then the whole list is boundary list instead
     ret.size match {

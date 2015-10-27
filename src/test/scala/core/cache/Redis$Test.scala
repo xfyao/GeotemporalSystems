@@ -11,7 +11,7 @@ import scala.util.{Failure, Success}
 /**
  * Created by v962867 on 10/24/15.
  */
-class Redis$Test extends FunSuite {
+class Redis$Test extends FunSuite with FutureHelper {
 
   implicit val formats = DefaultFormats
 
@@ -24,9 +24,9 @@ class Redis$Test extends FunSuite {
 
     val event = parse(jevent).extract[Event]
     val trip = Controller.eventToTrip(event)
-    FutureHelper.getFutureValue(Redis.setTrip(trip))
+    getFutureValue(Redis.setTrip(trip))
 
-    val tripRetOpt = FutureHelper.getFutureValue(Redis.getTrip(tripId))
+    val tripRetOpt = getFutureValue(Redis.getTrip(tripId))
 
     assert(tripRetOpt != None)
 
@@ -43,10 +43,10 @@ class Redis$Test extends FunSuite {
     val pos1 = Position(123.0, 234.0)
     val pos2 = Position(123.1, 234.1)
 
-    FutureHelper.getFutureValue(Redis.addTripPosition(tripId, pos1))
-    FutureHelper.getFutureValue(Redis.addTripPosition(tripId, pos2))
+    getFutureValue(Redis.addTripPosition(tripId, pos1))
+    getFutureValue(Redis.addTripPosition(tripId, pos2))
 
-    val posSeq = FutureHelper.getFutureValue(Redis.getTripPositions(tripId))
+    val posSeq = getFutureValue(Redis.getTripPositions(tripId))
 
     assert(posSeq.size >= 2)
     assert(posSeq.head == pos2)
@@ -59,9 +59,9 @@ class Redis$Test extends FunSuite {
 
     val trip = SimpleTrip(tripId, 0)
 
-    FutureHelper.getFutureValue(Redis.addToGeoHash("xyz", trip, false))
+    getFutureValue(Redis.addToGeoHash("xyz", trip, false))
 
-    val tripsSeq = FutureHelper.getFutureValue(Redis.readFromGeoHash("xyz", false))
+    val tripsSeq = getFutureValue(Redis.readFromGeoHash("xyz", false))
     assert(tripsSeq.size >= 1)
     assert(tripsSeq.head.tripId == tripId)
   }
@@ -72,9 +72,9 @@ class Redis$Test extends FunSuite {
 
     val trip = SimpleTrip(tripId, 0)
 
-    FutureHelper.getFutureValue(Redis.addToGeoHash("xyz", trip, false))
+    getFutureValue(Redis.addToGeoHash("xyz", trip, false))
 
-    val tripsSeq = FutureHelper.getFutureValue(Redis.getGeoIndexKeys("x", false))
+    val tripsSeq = getFutureValue(Redis.getGeoIndexKeys("x", false))
     assert(tripsSeq.size >= 1)
     assert(tripsSeq.head == "xyz")
   }
@@ -85,9 +85,9 @@ class Redis$Test extends FunSuite {
 
     val trip = SimpleTrip(tripId, 0)
 
-    FutureHelper.getFutureValue(Redis.addToGeoHash("xyz", trip, true))
+    getFutureValue(Redis.addToGeoHash("xyz", trip, true))
 
-    val tripPositionsSeq = FutureHelper.getFutureValue(Redis.readFromGeoHash("xyz", true))
+    val tripPositionsSeq = getFutureValue(Redis.readFromGeoHash("xyz", true))
     assert(tripPositionsSeq.size >= 1)
     assert(tripPositionsSeq.head.tripId == tripId)
   }
@@ -98,9 +98,9 @@ class Redis$Test extends FunSuite {
 
     val trip = SimpleTrip(tripId, 0)
 
-    FutureHelper.getFutureValue(Redis.addToGeoHash("xyz", trip, true))
+    getFutureValue(Redis.addToGeoHash("xyz", trip, true))
 
-    val tripsSeq = FutureHelper.getFutureValue(Redis.getGeoIndexKeys("x", true))
+    val tripsSeq = getFutureValue(Redis.getGeoIndexKeys("x", true))
     assert(tripsSeq.size >= 1)
     assert(tripsSeq.head == "xyz")
   }

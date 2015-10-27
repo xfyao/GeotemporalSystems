@@ -9,7 +9,7 @@ import org.scalatest.FunSuite
 /**
  * Created by v962867 on 10/23/15.
  */
-class Controller$Test extends FunSuite {
+class Controller$Test extends FunSuite with GeoHelper with FutureHelper {
 
   implicit val formats = DefaultFormats
 
@@ -56,7 +56,7 @@ class Controller$Test extends FunSuite {
 
 
   test("test GeoHash functions") {
-    val geoHashAny = GeoHelper.geoHash(updatePos.lat, updatePos.lng)
+    val geoHashAny = geoHash(updatePos.lat, updatePos.lng)
     assert(geoHashAny == "9q8zh")
   }
 
@@ -76,7 +76,7 @@ class Controller$Test extends FunSuite {
     Thread.sleep(1000)
 
     // verify trip cache
-    val tripOpt = FutureHelper.getFutureValue(Redis.getTrip(tripId))
+    val tripOpt = getFutureValue(Redis.getTrip(tripId))
 
     assert(tripOpt != None)
 
@@ -89,7 +89,7 @@ class Controller$Test extends FunSuite {
     }
 
     // verify trip pos cache
-    val tPosSeq = FutureHelper.getFutureValue(Redis.getTripPositions(tripId))
+    val tPosSeq = getFutureValue(Redis.getTripPositions(tripId))
 
     val pos = tPosSeq.head
 
@@ -108,7 +108,7 @@ class Controller$Test extends FunSuite {
     Thread.sleep(1000)
 
     // verify trip cache
-    val tripOpt = FutureHelper.getFutureValue(Redis.getTrip(tripId))
+    val tripOpt = getFutureValue(Redis.getTrip(tripId))
     assert(tripOpt != None)
 
     tripOpt.map { trip =>
@@ -121,7 +121,7 @@ class Controller$Test extends FunSuite {
     }
 
     // verify trip position cache
-    val tPosSeq = FutureHelper.getFutureValue(Redis.getTripPositions(tripId))
+    val tPosSeq = getFutureValue(Redis.getTripPositions(tripId))
 
     val pos = tPosSeq.head
     assert(pos.lat == event.lat)
@@ -138,7 +138,7 @@ class Controller$Test extends FunSuite {
     Thread.sleep(1000)
 
     // verify trip cache
-    val tripOpt2 = FutureHelper.getFutureValue(Redis.getTrip(tripId))
+    val tripOpt2 = getFutureValue(Redis.getTrip(tripId))
 
     assert(tripOpt2 != None)
 
@@ -152,7 +152,7 @@ class Controller$Test extends FunSuite {
       assert(trip.fare == None)
     }
 
-    val tPosSeq2 = FutureHelper.getFutureValue(Redis.getTripPositions(tripId))
+    val tPosSeq2 = getFutureValue(Redis.getTripPositions(tripId))
     assert(tPosSeq2.size == tPosSeq.size)
   }
 
@@ -167,7 +167,7 @@ class Controller$Test extends FunSuite {
     Thread.sleep(1000)
 
     // verify trip cache
-    val tripOpt = FutureHelper.getFutureValue(Redis.getTrip(tripId))
+    val tripOpt = getFutureValue(Redis.getTrip(tripId))
 
     assert(tripOpt != None)
 
@@ -183,33 +183,33 @@ class Controller$Test extends FunSuite {
     }
 
     // verify trip pos cache
-    val tPosSeq = FutureHelper.getFutureValue(Redis.getTripPositions(tripId))
+    val tPosSeq = getFutureValue(Redis.getTripPositions(tripId))
     val pos = tPosSeq.head
     assert(pos.lat == event.lat)
     assert(pos.lng == event.lng)
 
     // verify the geocache for all positions. Choose any position
-    val geoHashAny = GeoHelper.geoHash(updatePos.lat, updatePos.lng)
+    val geoHashAny = geoHash(updatePos.lat, updatePos.lng)
     println("geoHashAny = " + geoHashAny)
 
-    val tripPositionsSeq = FutureHelper.getFutureValue(Redis.readFromGeoHash(geoHashAny, false))
+    val tripPositionsSeq = getFutureValue(Redis.readFromGeoHash(geoHashAny, false))
     assert(tripPositionsSeq.size >= 1)
     assert(tripPositionsSeq.head.tripId == tripId)
 
     // verify the geocache for start/stop
     // start point
-    val geoHashBegin = GeoHelper.geoHash(beginPos.lat, beginPos.lng)
+    val geoHashBegin = geoHash(beginPos.lat, beginPos.lng)
     println("geoHashBegin = " + geoHashBegin)
 
-    val tripStartSeq = FutureHelper.getFutureValue(Redis.readFromGeoHash(geoHashBegin, true))
+    val tripStartSeq = getFutureValue(Redis.readFromGeoHash(geoHashBegin, true))
     assert(tripStartSeq.size >= 1)
     assert(tripStartSeq.head.tripId == tripId)
 
     // end point
-    val geoHashEnd = GeoHelper.geoHash(endPos.lat, endPos.lng).toString
+    val geoHashEnd = geoHash(endPos.lat, endPos.lng).toString
     println("geoHashEnd = " + geoHashEnd)
 
-    val tripStopSeq = FutureHelper.getFutureValue(Redis.readFromGeoHash(geoHashEnd, true))
+    val tripStopSeq = getFutureValue(Redis.readFromGeoHash(geoHashEnd, true))
     assert(tripStopSeq.size >= 1)
     assert(tripStopSeq.head.tripId == tripId)
 

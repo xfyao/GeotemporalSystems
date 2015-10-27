@@ -3,8 +3,7 @@ package core.actors
 import akka.actor.{Actor, ActorLogging}
 import core.cache.Redis
 import core.model.{SimpleTrip, Trip}
-import core.util.{FutureHelper, GeoHelper}
-import org.slf4j.LoggerFactory
+import core.util.{AppLogger, FutureHelper, GeoHelper}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
@@ -14,21 +13,19 @@ import scala.util.{Failure, Success}
  */
 case class BuildStartStopGeoCacheMsg(trip: Trip)
 
-class BuildStartStopGeoCacheActor extends Actor with ActorLogging {
-
-  val logger = LoggerFactory.getLogger(this.getClass)
+class BuildStartStopGeoCacheActor extends Actor with ActorLogging with GeoHelper with FutureHelper with AppLogger {
 
   def receive = {
 
     case BuildStartStopGeoCacheMsg(trip) =>
       val startFutureOpt = trip.startPos.map { pos =>
-        val geoHash = GeoHelper.geoHash(pos.lat, pos.lng)
-        Redis.addToGeoHash(geoHash, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), true)
+        val geoHashStr = geoHash(pos.lat, pos.lng)
+        Redis.addToGeoHash(geoHashStr, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), true)
       }
 
       val stopFutureOpt = trip.stopPos.map { pos =>
-        val geoHash = GeoHelper.geoHash(pos.lat, pos.lng)
-        Redis.addToGeoHash(geoHash, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), true)
+        val geoHashStr = geoHash(pos.lat, pos.lng)
+        Redis.addToGeoHash(geoHashStr, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), true)
       }
 
       // blocking here to wait threads to finish
@@ -36,14 +33,14 @@ class BuildStartStopGeoCacheActor extends Actor with ActorLogging {
         case Success(x) => logger.info(s"index start pos successfully: $trip")
         case Failure(ex) => logger.error(s"index start pos failed: $trip", ex)
       }
-        FutureHelper.getFutureValue(f)
+        getFutureValue(f)
       }
 
       stopFutureOpt.map { f => f.onComplete {
         case Success(x) => logger.info(s"index start pos successfully: $trip $x")
         case Failure(ex) => logger.error(s"index start pos failed: $trip", ex)
       }
-        FutureHelper.getFutureValue(f)
+        getFutureValue(f)
       }
     case _ => logger.info("unexpected message")
   }

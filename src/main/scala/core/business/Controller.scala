@@ -4,9 +4,7 @@ import akka.actor.{ActorSystem, Props}
 import core.actors._
 import core.cache._
 import core.model.{Event, Position, Trip}
-import core.util.FutureHelper._
-import core.util.GeoHelper
-import org.slf4j.LoggerFactory
+import core.util.{AppLogger, FutureHelper}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -14,9 +12,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 /**
  * Created by v962867 on 10/23/15.
  */
-object Controller {
+object Controller extends FutureHelper with AppLogger {
 
-  val logger = LoggerFactory.getLogger(this.getClass)
   val system = ActorSystem("GeoSystem")
   val geoIndexFinishedTripActor = system.actorOf(Props[GeoIndexFinishedTripActor], "GeoIndexFinishedTripActor")
   val buildStartStopGeoCacheActor = system.actorOf(Props[BuildStartStopGeoCacheActor], "BuildStartStopGeoCacheActor")
@@ -51,7 +48,6 @@ object Controller {
 
     // update cache now if necessary
     updatedTripInfoOpt.map{ trip =>
-      val geoHash = GeoHelper.geoHash(trip.curPos.lat, trip.curPos.lng)
       val posIndexFuture = for {
         retSetTrip <- Redis.setTrip(trip)
         retSetPosList <- Redis.addTripPosition(trip.tripId, trip.curPos)
@@ -67,7 +63,7 @@ object Controller {
         buildStartStopGeoCacheActor ! BuildStartStopGeoCacheMsg(trip)
       }
 
-      // update the count hash and do it in blocking because of low overhead
+      // update the count hash and do it in blocking way because of low overhead
       updateCountHash(trip)
     }
   }
@@ -133,6 +129,5 @@ object Controller {
   }
 
   def getOccuringCount = CountHash.size
-
 
 }

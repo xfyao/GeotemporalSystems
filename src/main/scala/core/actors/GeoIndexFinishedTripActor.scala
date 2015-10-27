@@ -3,7 +3,7 @@ package core.actors
 import akka.actor.{Actor, ActorLogging}
 import core.cache.Redis
 import core.model.{SimpleTrip, Trip}
-import core.util.{FutureHelper, GeoHelper}
+import core.util.{AppLogger, FutureHelper, GeoHelper}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -15,16 +15,14 @@ import scala.util.{Failure, Success}
  */
 case class GeoIndexFinishedTripMsg(trip: Trip)
 
-class GeoIndexFinishedTripActor extends Actor with ActorLogging{
-
-  val logger = LoggerFactory.getLogger(this.getClass)
+class GeoIndexFinishedTripActor extends Actor with ActorLogging with GeoHelper with FutureHelper with AppLogger {
 
   def receive = {
     case GeoIndexFinishedTripMsg(trip) =>
 
       // get position list
-      val listPos = FutureHelper.getFutureValue(Redis.getTripPositions(trip.tripId))
-      val geoGroup = listPos.groupBy(pos => GeoHelper.geoHash(pos.lat, pos.lng))
+      val listPos = getFutureValue(Redis.getTripPositions(trip.tripId))
+      val geoGroup = listPos.groupBy(pos => geoHash(pos.lat, pos.lng))
 
       // introduce parallelism here
       val futureList: List[Future[Long]] = geoGroup.map { case (hashKey, listPos) =>
@@ -38,7 +36,7 @@ class GeoIndexFinishedTripActor extends Actor with ActorLogging{
       }
 
       // block here to wait for all threads finished
-      FutureHelper.getFutureValue(futureOfList)
+      getFutureValue(futureOfList)
 
     case _ => logger.info("unexpected message")
   }

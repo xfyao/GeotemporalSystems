@@ -2,8 +2,7 @@ package core.business
 
 import core.cache._
 import core.model.{Position, TripsSummary}
-import core.util.{FutureHelper, GeoHelper}
-import org.slf4j.LoggerFactory
+import core.util.{AppLogger, FutureHelper, GeoHelper}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -13,9 +12,7 @@ import scala.util.{Failure, Success}
 /**
  * Created by v962867 on 10/23/15.
  */
-object QueryHandler {
-
-  val logger = LoggerFactory.getLogger(this.getClass)
+object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
 
   /** scan the geohash index to find trips in this geo rec
     *
@@ -48,16 +45,16 @@ object QueryHandler {
                 case false =>
                   // fetch positions for this trip
                   val positions = isForStartAndStop match {
-                    case false => FutureHelper.getFutureValue(Redis.getTripPositions(trip.tripId))
+                    case false => getFutureValue(Redis.getTripPositions(trip.tripId))
                     case true =>
-                      val tripOpt = FutureHelper.getFutureValue(Redis.getTrip(trip.tripId))
+                      val tripOpt = getFutureValue(Redis.getTrip(trip.tripId))
                       var listPos = List[Position]()
                       tripOpt.map{trip =>
                         trip.startPos.map(v =>listPos +:= v)
                         trip.stopPos.map(v =>listPos +:= v)}
                       listPos
                   }
-                  val inRec = GeoHelper.hasPositionInRec(positions.toList, bottomLeft, topRight)
+                  val inRec = hasPositionInRec(positions.toList, bottomLeft, topRight)
                   inRec match {
                     case false => nonResultHash.add(trip.tripId)
                     case true =>
@@ -76,7 +73,7 @@ object QueryHandler {
     }
 
     // blocking here for all threads finished
-    FutureHelper.getFutureValue(futureOfList)
+    getFutureValue(futureOfList)
   }
 
   private def longestCommonPrefix(s1:String, s2:String): String = {
@@ -92,17 +89,17 @@ object QueryHandler {
 
   private def getIndexedGeohashes(geoHashList: List[String], isForStartAndStop: Boolean): List[String] = {
 
-    val precision = geoHashList.headOption.map(_.length).getOrElse(GeoHelper.characterPrecision)
+    val precision = geoHashList.headOption.map(_.length).getOrElse(characterPrecision)
 
     precision match {
 
-      case x if x < GeoHelper.characterPrecision =>
+      case x if x < characterPrecision =>
         val futureList: List[Future[Seq[String]]] = geoHashList.map{ geoHash =>
           Redis.getGeoIndexKeys(geoHash, isForStartAndStop)
         }
         val futureOfList: Future[List[Seq[String]]] = Future.sequence(futureList)
 
-        FutureHelper.getFutureValue(futureOfList).map(hashSeq => hashSeq.toList).flatten
+        getFutureValue(futureOfList).map(hashSeq => hashSeq.toList).flatten
       case _ =>
         geoHashList
     }
@@ -111,8 +108,8 @@ object QueryHandler {
   private def countFinishedTripsInGeoRec(bottomLeft: Position, topRight: Position,
                                          isForStartAndStop: Boolean): TripsSummary = {
 
-    val geoHashList = GeoHelper.getGeoHashListInRec(bottomLeft, topRight)
-    val boundaryGeoHashList = GeoHelper.getBoundaryGeoHashListInRec(bottomLeft, topRight, geoHashList)
+    val geoHashList = getGeoHashListInRec(bottomLeft, topRight)
+    val boundaryGeoHashList = getBoundaryGeoHashListInRec(bottomLeft, topRight, geoHashList)
     val innerGeoHashList = geoHashList.filterNot(boundaryGeoHashList.contains(_))
 
     logger.info(s"check geoHashList: \n full - $geoHashList \n boundary - $boundaryGeoHashList " +

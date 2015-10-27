@@ -8,7 +8,7 @@ import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 import akka.io.IO
 import spray.can.Http
 
-object Boot extends App {
+object Boot extends App with HttpLogger {
 
   implicit val system = ActorSystem("akka-system")
 
@@ -17,6 +17,8 @@ object Boot extends App {
 
   /* and bind to Akka's I/O interface */
   IO(Http) ! Http.Bind(service, "0.0.0.0",  8081)
+
+  logger.info("http server is started.")
 
 }
 

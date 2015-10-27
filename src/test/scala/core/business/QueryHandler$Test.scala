@@ -8,8 +8,7 @@ import org.scalatest.{PrivateMethodTester, FunSuite}
 /**
  * Created by v962867 on 10/24/15.
  */
-class QueryHandler$Test extends FunSuite with PrivateMethodTester {
-
+class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper {
 
   test("test get longest common prefix") {
 
@@ -31,13 +30,13 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester {
     val trip = SimpleTrip(123, 0.0)
 
     // distance 379km
-    val geoHashBL = GeoHelper.geoHash(bottomLeft.lat, bottomLeft.lng)
-    val geoHashTR = GeoHelper.geoHash(topRight.lat, topRight.lng)
+    val geoHashBL = geoHash(bottomLeft.lat, bottomLeft.lng)
+    val geoHashTR = geoHash(topRight.lat, topRight.lng)
 
     Redis.addToGeoHash(geoHashBL, trip, false)
     Redis.addToGeoHash(geoHashTR, trip, false)
 
-    val geoHashes1 = GeoHelper.getGeoHashListInRec(bottomLeft, topRight)
+    val geoHashes1 = getGeoHashListInRec(bottomLeft, topRight)
     println("geohash 1: " + geoHashes1)
     assert(geoHashes1.head.length == 3)
 
@@ -45,7 +44,7 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester {
 
     val geoHashes2 = QueryHandler invokePrivate getIndexedGeohashes(geoHashes1, false)
     println("geohash 2: " + geoHashes2)
-    assert(geoHashes2.head.length == GeoHelper.characterPrecision)
+    assert(geoHashes2.head.length == characterPrecision)
 
   }
 
