@@ -32,12 +32,12 @@ object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
       Redis.readFromGeoHash(geoHash, isForStartAndStop).map { tripSeq =>
         isBoundary match {
           case false =>
-            println(s"checking inner geohash: $geoHash $tripSeq $isForStartAndStop")
+            logger.debug(s"checking inner geohash: $geoHash $tripSeq $isForStartAndStop")
             tripSeq.foreach ( trip =>
               resultHash.put(trip.tripId, trip.fare)
             )
           case true =>
-            println(s"checking boundary geohash: $geoHash $tripSeq $isForStartAndStop")
+            logger.debug(s"checking boundary geohash: $geoHash $tripSeq $isForStartAndStop")
             tripSeq.filter(trip =>
               // filter trips by (1) not processed yet and (2) has position in the geo rec
               resultHash.contains(trip.tripId) || nonResultHash.contains(trip.tripId) match {
