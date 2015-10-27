@@ -1,6 +1,6 @@
 ## Synopsis
 
-A system shows how to index, process and utilize the geo-temporal information
+A system shows how to index, process and utilize the geo-temporal information in a scalable way.
 
 ## Software Stack
 
@@ -18,7 +18,7 @@ JMeter: a test automation framework to provide load testing, v1.0
 
 ## Installation
 
-Redis: v2.8 http://redis.io/download. The default configuration is used.
+Redis: http://redis.io/download. The default configuration is used.
 
 SBT: http://www.scala-sbt.org
 
@@ -33,7 +33,7 @@ Steps:
 ## Tests
 
 This system accepts the geo-temporal events by http post and Redis message sub/pub. The messages need to be posted to
-http://localhost:8081/addEvent or published Redis to "geoevent" channel.
+http://localhost:8081/addEvent or published to Redis "geoevent" channel.
 
 The messages are in JSON format and have three types: begin, update and end. Examples are below:
 
