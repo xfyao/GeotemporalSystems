@@ -26,7 +26,7 @@ Steps:
 
 (1) start Redis: redis-2.8.23/src/redis-server
 
-(2) start application in SBT environment: yourproject/sbt run
+(2) start application in SBT environment: GeotemporalSystems/sbt "run-main http.Boot"
 
 (3) (optional) use jmeter script tools/geotest.jmx to populate trip data to system
 
