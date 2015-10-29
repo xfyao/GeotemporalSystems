@@ -4,13 +4,15 @@ import java.net.InetSocketAddress
 
 import core.business.Controller
 import core.model.Event
+import core.util.ServerConfig
 import net.liftweb.json._
 import org.slf4j.LoggerFactory
 import redis.actors.RedisSubscriberActor
 import redis.api.pubsub.{Message, PMessage}
 
 class SubscribeActor(channels: Seq[String] = Nil, patterns: Seq[String] = Nil, onConnectStatus:Boolean=>Unit)
-  extends RedisSubscriberActor(new InetSocketAddress("localhost", 6379), channels, patterns, None, onConnectStatus) {
+  extends RedisSubscriberActor(new InetSocketAddress(ServerConfig.getConfig.getString("redis.hostname"),
+    ServerConfig.getConfig.getInt("redis.port")), channels, patterns, None, onConnectStatus) {
 
   val logger = LoggerFactory.getLogger(this.getClass)
 

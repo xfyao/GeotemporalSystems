@@ -36,5 +36,7 @@ libraryDependencies ++= Seq (
   // -- logback --
   "ch.qos.logback" % "logback-classic" % "1.1.2",
   // -- Redis client - a high performance Java implementation --
-  "redis.clients" % "jedis" % "2.7.2"
+  "redis.clients" % "jedis" % "2.7.2",
+  // -- Config --
+  "com.typesafe" % "config" % "1.2.1"
 )

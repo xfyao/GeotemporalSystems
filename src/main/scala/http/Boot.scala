@@ -6,6 +6,7 @@ package http
 
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 import akka.io.IO
+import core.util.ServerConfig
 import spray.can.Http
 
 object Boot extends App with HttpLogger {
@@ -16,7 +17,8 @@ object Boot extends App with HttpLogger {
   val service = system.actorOf(Props[ServerActor], "geoservice")
 
   /* and bind to Akka's I/O interface */
-  IO(Http) ! Http.Bind(service, "0.0.0.0",  8081)
+  val port = ServerConfig.getConfig.getInt("spray.port")
+  IO(Http) ! Http.Bind(service, "0.0.0.0",  port)
 
   logger.info("http server is started.")
 

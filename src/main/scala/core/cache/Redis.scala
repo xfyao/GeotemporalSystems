@@ -1,7 +1,7 @@
 package core.cache
 
 import core.model._
-import core.util.CacheLogger
+import core.util.{ServerConfig, CacheLogger}
 import redis.clients.jedis.{JedisPool, JedisPoolConfig}
 
 import scala.collection.JavaConversions._
@@ -42,9 +42,13 @@ object StartStopIdGen extends CacheIdGen {
 
 object Redis extends CacheLogger {
 
+  val poolSize = ServerConfig.getConfig.getInt("jedis.poolsize")
+  val hostName = ServerConfig.getConfig.getString("redis.hostname")
+  val port = ServerConfig.getConfig.getInt("redis.port")
+
   val poolConfig = new JedisPoolConfig()
-  poolConfig.setMaxTotal(128)
-  val pool = new JedisPool(poolConfig, "localhost");
+  poolConfig.setMaxTotal(poolSize)
+  val pool = new JedisPool(poolConfig, hostName, port);
 
   /* trip cache key */
   def tripIdStr(tripId: Int): String = s"trip-${tripId}"

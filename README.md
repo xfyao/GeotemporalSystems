@@ -30,6 +30,10 @@ Steps:
 
 (3) (optional) use jmeter script tools/geotest.jmx to populate trip data to system
 
+Configure change:
+
+All setting are at resources/application.conf
+
 ## Tests
 
 This system accepts the geo-temporal events by http post and Redis message sub/pub. The messages need to be posted to

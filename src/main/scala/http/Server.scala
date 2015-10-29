@@ -4,6 +4,7 @@ import akka.actor.Props
 import core.actors.SubscribeActor
 import core.business.{Controller, QueryHandler}
 import core.model.{GeoRec, Event, Position, TripsSummary}
+import core.util.ServerConfig
 import org.json4s._
 import org.json4s.native.Serialization.write
 import spray.httpx.Json4sSupport
@@ -26,11 +27,12 @@ trait Server extends HttpService with HttpLogger {
   import Json4sProtocol._
 
   // subscribe to Redis messag
-  val channels = Seq("geoevent")
+  val channelName = ServerConfig.getConfig.getString("redis.geochannel")
+  val channels = Seq(channelName)
   val patterns = Seq()
 
   def onConnectStatus(connected: Boolean) = {
-    println("connected: " + connected)
+    logger.info("connected: " + connected)
   }
 
   // create SubscribeActor instance
