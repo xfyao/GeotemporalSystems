@@ -1,19 +1,50 @@
 package core.cache
 
 import core.model._
-import redis.RedisClient
+import core.util.CacheLogger
+import redis.clients.jedis.{JedisPool, JedisPoolConfig}
 
+import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 /**
  * Created by v962867 on 10/24/15.
  */
-object Redis {
+trait CacheIdGen {
 
-  implicit val akkaSystem = akka.actor.ActorSystem()
+  val name: String
 
-  val redis = RedisClient()
+  def genId(hashId: String): String
+
+  /* convert geohash index to geohash only, eg, ss-9q8g6 to 9q8g6 */
+  def reverseGeoHashId(hashKey: String): String = {
+    hashKey.split("-")(1)
+  }
+}
+
+object AllPosIdGen extends CacheIdGen {
+
+  val name = "AllPos"
+
+  /* geohash index cache key for all positions */
+  def genId(hashId: String): String = s"pos-${hashId}"
+}
+
+object StartStopIdGen extends CacheIdGen {
+
+  val name = "StartStop"
+
+  /* geohash index cache key for all positions */
+  def genId(hashId: String): String = s"ss-${hashId}"
+}
+
+
+object Redis extends CacheLogger {
+
+  val poolConfig = new JedisPoolConfig()
+  poolConfig.setMaxTotal(128)
+  val pool = new JedisPool(poolConfig, "localhost");
 
   /* trip cache key */
   def tripIdStr(tripId: Int): String = s"trip-${tripId}"
@@ -21,56 +52,124 @@ object Redis {
   /* trip positions cache key */
   def tripPosIdStr(tripId: Int): String = s"tPos-${tripId}"
 
-  /* geohash index cache key for all positions */
-  def posHashId(hashId: String): String = s"pos-${hashId}"
-
-  /* geohask index cache key for start and stop positions */
-  def ssHashId(hashId: String): String = s"ss-${hashId}"
-
-  /* convert geohash index to geohash only, eg, ss-9q8g6 to 9q8g6 */
-  def reverseGeoHashId(hashKey: String): String = {
-    hashKey.split("-")(1)
-  }
-
-  def setTrip(trip: Trip): Future[Boolean] = {
-    redis.set[Trip](tripIdStr(trip.tripId), trip)
+  /* The plan is to find a good nonblocking lib to replace this java Redis client. Therefore Future is used in APIs */
+  def setTrip(trip: Trip): Future[String] = {
+    Future {
+      val jedis = pool.getResource
+      try {
+        jedis.set(tripIdStr(trip.tripId), Trip.stringFormatter.serialize(trip))
+      } catch {
+        case ex: Throwable =>
+          logger.error("setTrip", ex)
+          "exception"
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
+    }
   }
 
   def getTrip(tripId: Int): Future[Option[Trip]] = {
-    redis.get[Trip](tripIdStr(tripId))
+    Future {
+      val jedis = pool.getResource
+      try {
+        val ret = jedis.get(tripIdStr(tripId))
+        ret match {
+          case null => None
+          case _ => Some(Trip.stringFormatter.deserialize(ret))
+        }
+      } catch {
+        case ex: Throwable =>
+          logger.error("getTrip", ex)
+          None
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
+    }
   }
 
   def addTripPosition(tripId: Int, pos: Position): Future[Long] = {
-    redis.lpush[Position](tripPosIdStr(tripId), pos)
+
+    Future {
+      val jedis = pool.getResource
+      try {
+        jedis.lpush(tripPosIdStr(tripId), Position.stringFormatter.serialize(pos))
+      } catch {
+        case ex: Throwable =>
+          logger.error("addTripPosition", ex)
+          -1
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
+    }
   }
 
   def getTripPositions(tripId: Int): Future[Seq[Position]] = {
-    redis.lrange[Position](tripPosIdStr(tripId),0,-1)
-  }
 
-  def addToGeoHash(hashId: String, tps: SimpleTrip, isForStartAndStop: Boolean): Future[Long] = {
-    isForStartAndStop match {
-      case true => redis.lpush[SimpleTrip](ssHashId(hashId), tps)
-      case false => redis.lpush[SimpleTrip](posHashId(hashId), tps)
+    Future {
+      val jedis = pool.getResource
+      try {
+        val ret = jedis.lrange(tripPosIdStr(tripId), 0, -1)
+        ret.toList.map{ str =>
+          Position.stringFormatter.deserialize(str)
+        }
+      } catch {
+        case ex: Throwable =>
+          logger.error("getTripPositions", ex)
+          List()
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
     }
   }
 
-  def readFromGeoHash(hashId: String, isForStartAndStop: Boolean): Future[Seq[SimpleTrip]] = {
+  def addToGeoHash[T <: CacheIdGen](hashId: String, tps: SimpleTrip, idGen: T): Future[Long] = {
 
-    val posListFuture = isForStartAndStop match {
-      case true => redis.lrange[SimpleTrip](ssHashId(hashId), 0, -1)
-      case false => redis.lrange[SimpleTrip](posHashId(hashId), 0, -1)
+    Future {
+      val jedis = pool.getResource
+      try {
+        jedis.lpush(idGen.genId(hashId), SimpleTrip.stringFormatter.serialize(tps))
+      } catch {
+        case ex: Throwable =>
+          logger.error("addToGeoHash", ex)
+          -1
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
     }
-
-    return posListFuture
   }
 
-  def getGeoIndexKeys(prefix: String, isForStartAndStop: Boolean): Future[Seq[String]] = {
-    isForStartAndStop match {
-      case true => redis.keys(ssHashId(prefix) + "*").map(kSeq => kSeq.map(v =>reverseGeoHashId(v)))
-      case false => redis.keys(posHashId(prefix) + "*").map(kSeq => kSeq.map(v =>reverseGeoHashId(v)))
+  def readFromGeoHash[T <: CacheIdGen](hashId: String, idGen: T): Future[Seq[SimpleTrip]] = {
+    Future {
+      val jedis = pool.getResource
+      try {
+        val ret = jedis.lrange(idGen.genId(hashId), 0, -1)
+        ret.toList.map { str =>
+          SimpleTrip.stringFormatter.deserialize(str)
+        }
+      } catch {
+        case ex: Throwable =>
+          logger.error("readFromGeoHash", ex)
+          List()
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
     }
   }
 
-  def close = akkaSystem.shutdown()
+  def getGeoIndexKeys[T <: CacheIdGen](prefix: String, idGen: T): Future[Seq[String]] = {
+    Future {
+      val jedis = pool.getResource
+      try {
+        val ret = jedis.keys(idGen.genId(prefix) + "*")
+        ret.toList.map(v =>
+          idGen.reverseGeoHashId(v))
+      } catch {
+        case ex: Throwable =>
+          logger.error("getGeoIndexKeys", ex)
+          List()
+      } finally {
+        pool.returnResourceObject(jedis)
+      }
+    }
+  }
 }

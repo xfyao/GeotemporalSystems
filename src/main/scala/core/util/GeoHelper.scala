@@ -2,7 +2,7 @@ package core.util
 
 import ch.hsr.geohash.GeoHash
 import ch.hsr.geohash.util.{BoundingBoxGeoHashIterator, TwoGeoHashBoundingBox}
-import core.model.Position
+import core.model.{GeoRec, Position}
 
 /**
  * Created by v962867 on 10/24/15.
@@ -32,30 +32,30 @@ trait GeoHelper {
   }
 
   /* helper method to check position in the geo rec */
-  def isInRec(pos: Position, bottomLeft: Position, topRight: Position): Boolean = {
+  def isInRec(pos: Position, geoRec: GeoRec): Boolean = {
 
-    pos.lat >= bottomLeft.lat &&
-      pos.lat <= topRight.lat &&
-      pos.lng >= bottomLeft.lng &&
-      pos.lng <= topRight.lng
+    pos.lat >= geoRec.bottomLeft.lat &&
+      pos.lat <= geoRec.topRight.lat &&
+      pos.lng >= geoRec.bottomLeft.lng &&
+      pos.lng <= geoRec.topRight.lng
   }
 
   /* helper method to check at lest one position of a list in the geo rec */
-  def hasPositionInRec(positions: List[Position], bottomLeft: Position, topRight: Position): Boolean = {
+  def hasPositionInRec(positions: List[Position], geoRec: GeoRec): Boolean = {
 
     for (i <- 0 to positions.size - 1) {
       val e = positions(i)
-      if(isInRec(Position(e.lat,e.lng), bottomLeft, topRight)) return true
+      if(isInRec(Position(e.lat,e.lng), geoRec)) return true
     }
 
     false
   }
 
   /* caculate geohash list of the geo rec */
-  def getGeoHashListInRec(bottomLeft: Position, topRight: Position): List[String] = {
+  def getGeoHashListInRec(geoRec: GeoRec): List[String] = {
 
     //based on distance (km) to dynamically choose the geohash precision
-    val dist = distance(bottomLeft, topRight)
+    val dist = distance(geoRec.bottomLeft, geoRec.topRight)
 
     val precision = dist match {
       case x if x < 80 => characterPrecision
@@ -65,8 +65,8 @@ trait GeoHelper {
       case _ => 1
     }
 
-    val geoHashBL = geoHashObj(bottomLeft.lat, bottomLeft.lng, precision)
-    val geoHashTR = geoHashObj(topRight.lat, topRight.lng, precision)
+    val geoHashBL = geoHashObj(geoRec.bottomLeft.lat, geoRec.bottomLeft.lng, precision)
+    val geoHashTR = geoHashObj(geoRec.topRight.lat, geoRec.topRight.lng, precision)
 
     val boundBox = new TwoGeoHashBoundingBox(geoHashBL, geoHashTR)
     val boundingBoxIter = new BoundingBoxGeoHashIterator(boundBox)
@@ -82,13 +82,13 @@ trait GeoHelper {
   }
 
   /* find the boundary geohash list from all geohashes of this geo rec */
-  def getBoundaryGeoHashListInRec(bottomLeft: Position, topRight: Position, allGeoHashList: List[String]) = {
+  def getBoundaryGeoHashListInRec(geoRec: GeoRec, allGeoHashList: List[String]) = {
 
     var ret = List[String]()
 
-    val geoHashBL = geoHashObj(bottomLeft.lat, bottomLeft.lng)
+    val geoHashBL = geoHashObj(geoRec.bottomLeft.lat, geoRec.bottomLeft.lng)
 
-    val geoHashTR = geoHashObj(topRight.lat, topRight.lng)
+    val geoHashTR = geoHashObj(geoRec.topRight.lat, geoRec.topRight.lng)
 
     var current = geoHashBL.getNorthernNeighbour
 

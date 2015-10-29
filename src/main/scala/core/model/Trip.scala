@@ -1,9 +1,7 @@
 package core.model
 
-import akka.util.ByteString
 import net.liftweb.json.Serialization.write
 import net.liftweb.json._
-import redis.ByteStringFormatter
 
 
 /**
@@ -14,62 +12,42 @@ case class TripsSummary(totalCount: Int, totalFare: Double)
 
 case class Event(event: String, tripId: Int, lat: Double, lng: Double, fare: Option[Double], epoch: Long)
 
+case class GeoRec(bottomLeft: Position, topRight: Position)
+
+class StringFormatter[T<: AnyRef] {
+
+  implicit val formats = DefaultFormats
+
+  def serialize(data: T): String = {
+    write[T](data)
+  }
+
+  def deserialize(str: String)(implicit m: Manifest[T]): T = {
+    parse(str).extract[T]
+  }
+}
+
 case class Trip(tripId: Int, status: String, startPos: Option[Position] = None, stopPos: Option[Position] = None,
                 curPos: Position, fare: Option[Double], lastUpdate: Long)
 
-
 object Trip {
 
-  implicit val byteStringFormatter = new ByteStringFormatter[Trip] {
-
-    implicit val formats = DefaultFormats
-
-    def serialize(data: Trip): ByteString = {
-      val jsonString = write(data)
-      ByteString(jsonString)
-    }
-
-    def deserialize(bs: ByteString): Trip = {
-      parse(bs.utf8String).extract[Trip]
-    }
-  }
-
+  implicit val stringFormatter = new StringFormatter[Trip]
 }
 
 case class Position(lat: Double, lng: Double)
 
 object Position {
 
-  implicit val byteStringFormatter = new ByteStringFormatter[Position] {
-
-    def serialize(data: Position): ByteString = {
-      ByteString(data.lat + "," + data.lng)
-    }
-
-    def deserialize(bs: ByteString): Position = {
-      val r = bs.utf8String.split(',').toList
-      Position(r(0).toDouble, r(1).toDouble)
-    }
-  }
+  implicit val stringFormatter = new StringFormatter[Position]
 }
 
 case class SimpleTrip(tripId: Int, fare: Double)
 
-
 object SimpleTrip {
 
-  implicit val formats = DefaultFormats
+  implicit val stringFormatter = new StringFormatter[SimpleTrip]
 
-  implicit val byteStringFormatter = new ByteStringFormatter[SimpleTrip] {
-    def serialize(data: SimpleTrip): ByteString = {
-      val jsonString = write(data)
-      ByteString(jsonString)
-    }
-
-    def deserialize(bs: ByteString): SimpleTrip = {
-      parse(bs.utf8String).extract[SimpleTrip]
-    }
-  }
 }
 
 

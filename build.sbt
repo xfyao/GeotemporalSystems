@@ -22,7 +22,7 @@ libraryDependencies ++= Seq (
   "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test",
   // -- GeoHash --
   "ch.hsr" % "geohash" % "1.1.0",
-  // -- Redis client --
+  // -- Redis client - a nonblocking Scala implementation --
   "com.etaty.rediscala" %% "rediscala" % "1.5.0",
   // -- Pickling --
   "org.scala-lang.modules" %% "scala-pickling" % "0.10.1",
@@ -35,7 +35,6 @@ libraryDependencies ++= Seq (
   "io.spray" %% "spray-testkit" % sprayVersion % "test",
   // -- logback --
   "ch.qos.logback" % "logback-classic" % "1.1.2",
-  // -- config util --
-  "com.typesafe" % "config" % "1.2.1"
-
+  // -- Redis client - a high performance Java implementation --
+  "redis.clients" % "jedis" % "2.7.2"
 )

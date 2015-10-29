@@ -4,28 +4,30 @@ import akka.actor.{ActorSystem, Props}
 import core.actors._
 import core.cache._
 import core.model.{Event, Position, Trip}
-import core.util.{AppLogger, FutureHelper}
+import core.util.AppLogger
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 /**
  * Created by v962867 on 10/23/15.
  */
-object Controller extends FutureHelper with AppLogger {
+object Controller extends AppLogger {
 
   val system = ActorSystem("GeoSystem")
   val geoIndexFinishedTripActor = system.actorOf(Props[GeoIndexFinishedTripActor], "GeoIndexFinishedTripActor")
   val buildStartStopGeoCacheActor = system.actorOf(Props[BuildStartStopGeoCacheActor], "BuildStartStopGeoCacheActor")
 
   /* the receiver of incoming events */
-  def addEvent(event: Event) : Unit = {
+  def addEvent(event: Event) : Future[Unit] = {
 
     logger.info(s"receive event: $event")
 
-    val updatedTripInfoOpt = event.event match {
+    val updatedTripInfoOptFuture: Future[Option[Trip]] = event.event match {
       case "begin" =>
-        Some(eventToTrip(event))
+        Future(Some(eventToTrip(event)))
       case "update" | "end" =>
         CountHash.get(event.tripId) match {
           case None =>
@@ -35,48 +37,60 @@ object Controller extends FutureHelper with AppLogger {
             // for update event, if position is not changed since last time, we don't update
             (event.event == "end" || (event.lat != trip.curPos.lat || event.lng != trip.curPos.lng)) match {
               case true =>
-                Some(updatedTrip(trip, event))
-              case false => None
+                Future(Some(updatedTrip(trip, event)))
+              case false => Future(None)
             }
         }
       case _ =>
         logger.info("wrong type of event, do nothing!");
-        None
+        Future(None)
     }
 
-    logger.info(s"updated trip info: $updatedTripInfoOpt")
+    updatedTripInfoOptFuture onComplete {
+      case Success(x) => logger.info(s"merged trip: $x")
+      case Failure(ex) => logger.error(s"merged trip is failed: $event",ex)
+    }
+
+    // helper method to update trip info in KV store if necessary
+    def updateTrip(updatedTripInfoOpt: Option[Trip]): Future[Unit] = {
+      updatedTripInfoOpt.map { trip =>
+        val posIndexFuture = for {
+          retSetTrip <- Redis.setTrip(trip)
+          retSetPosList <- Redis.addTripPosition(trip.tripId, trip.curPos)
+        } yield (retSetPosList)
+
+        posIndexFuture.map { _ =>
+          // geohash index the finished trip data asynchronously
+          if (event.event == "end") {
+            logger.info(s"ack actors for finished trip: $trip")
+            geoIndexFinishedTripActor ! GeoIndexFinishedTripMsg(trip)
+            buildStartStopGeoCacheActor ! BuildStartStopGeoCacheMsg(trip)
+          }
+
+          // update the count hash and do it in blocking way because of low overhead
+          updateCountHash(trip)
+        }
+      }.getOrElse(Future())
+    }
 
     // update cache now if necessary
-    updatedTripInfoOpt.map{ trip =>
-      val posIndexFuture = for {
-        retSetTrip <- Redis.setTrip(trip)
-        retSetPosList <- Redis.addTripPosition(trip.tripId, trip.curPos)
-      } yield (retSetPosList)
-
-      // blocking for futures to finish
-      val posIndex = getFutureValue(posIndexFuture)
-
-      // geohash index the finished trip data asynchronously
-      if (event.event == "end") {
-        logger.info(s"ack actors for finished trip: $trip")
-        geoIndexFinishedTripActor ! GeoIndexFinishedTripMsg(trip)
-        buildStartStopGeoCacheActor ! BuildStartStopGeoCacheMsg(trip)
-      }
-
-      // update the count hash and do it in blocking way because of low overhead
-      updateCountHash(trip)
+    for {
+      updatedTripInfoOpt <- updatedTripInfoOptFuture
+      ret <- updateTrip(updatedTripInfoOpt)
+    } yield {
+      ret
     }
   }
 
-  private def fetchAndMerge(event: Event): Option[Trip] = {
-
+  private def fetchAndMerge(event: Event): Future[Option[Trip]] = {
     logger.info("try to fetch existing trip and update it with new event: $event")
-
-    getFutureValue(Redis.getTrip(event.tripId)) match {
+    Redis.getTrip(event.tripId) map {
       case None =>
         Some(eventToTrip(event))
-      case Some(trip) =>
-        Some(updatedTrip(trip, event))
+      case Some(trip) => trip.status match {
+        case "end" => None // it handles the event out of sync situation, e.g., "end" event comes before "update" event
+        case _ => Some (updatedTrip (trip, event) )
+      }
     }
   }
 

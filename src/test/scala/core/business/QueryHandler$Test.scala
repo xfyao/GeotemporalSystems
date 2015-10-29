@@ -1,14 +1,16 @@
 package core.business
 
-import core.cache.Redis
-import core.model.{SimpleTrip, Event, Position}
-import core.util.GeoHelper
+import core.cache.{AllPosIdGen, Redis}
+import core.model.{GeoRec, SimpleTrip, Event, Position}
+import core.util.{FutureHelper, GeoHelper}
 import org.scalatest.{PrivateMethodTester, FunSuite}
+
+import scala.concurrent.Future
 
 /**
  * Created by v962867 on 10/24/15.
  */
-class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper {
+class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper with FutureHelper {
 
   test("test get longest common prefix") {
 
@@ -33,16 +35,16 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
     val geoHashBL = geoHash(bottomLeft.lat, bottomLeft.lng)
     val geoHashTR = geoHash(topRight.lat, topRight.lng)
 
-    Redis.addToGeoHash(geoHashBL, trip, false)
-    Redis.addToGeoHash(geoHashTR, trip, false)
+    Redis.addToGeoHash(geoHashBL, trip, AllPosIdGen)
+    Redis.addToGeoHash(geoHashTR, trip, AllPosIdGen)
 
-    val geoHashes1 = getGeoHashListInRec(bottomLeft, topRight)
+    val geoHashes1 = getGeoHashListInRec(GeoRec(bottomLeft, topRight))
     println("geohash 1: " + geoHashes1)
     assert(geoHashes1.head.length == 3)
 
-    val getIndexedGeohashes = PrivateMethod[List[String]]('getIndexedGeohashes)
+    val getIndexedGeohashes = PrivateMethod[Future[Seq[String]]]('getIndexedGeohashes)
 
-    val geoHashes2 = QueryHandler invokePrivate getIndexedGeohashes(geoHashes1, false)
+    val geoHashes2 = getFutureValue(QueryHandler invokePrivate getIndexedGeohashes(geoHashes1, AllPosIdGen))
     println("geohash 2: " + geoHashes2)
     assert(geoHashes2.head.length == characterPrecision)
 
@@ -63,11 +65,11 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
     val bottomLeft = Position(48.6, -4.39)
     val topRight = Position(48.6996, -4.301)
 
-    val countAll = QueryHandler.countAllPosInGeoRec(bottomLeft, topRight)
+    val countAll = getFutureValue(QueryHandler.countAllPosInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countAll.totalCount == 1)
 
-    val countSS = QueryHandler.countStartAndStopInGeoRec(bottomLeft, topRight)
+    val countSS = getFutureValue(QueryHandler.countStartAndStopInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countSS.totalCount == 1)
 
@@ -80,11 +82,11 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
     val bottomLeft = Position(48.62, -4.39)
     val topRight = Position(48.6996, -4.301)
 
-    val countAll = QueryHandler.countAllPosInGeoRec(bottomLeft, topRight)
+    val countAll = getFutureValue(QueryHandler.countAllPosInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countAll.totalCount == 0)
 
-    val countSS = QueryHandler.countStartAndStopInGeoRec(bottomLeft, topRight)
+    val countSS = getFutureValue(QueryHandler.countStartAndStopInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countSS.totalCount == 0)
 
@@ -95,11 +97,11 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
     val bottomLeft = Position(48.65, -4.39)
     val topRight = Position(48.6996, -4.301)
 
-    val countAll = QueryHandler.countAllPosInGeoRec(bottomLeft, topRight)
+    val countAll = getFutureValue(QueryHandler.countAllPosInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countAll.totalCount == 0)
 
-    val countSS = QueryHandler.countStartAndStopInGeoRec(bottomLeft, topRight)
+    val countSS = getFutureValue(QueryHandler.countStartAndStopInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countSS.totalCount == 0)
   }
@@ -111,11 +113,11 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
     val bottomLeft = Position(48.612, -4.34)
     val topRight = Position(48.613, -4.330)
 
-    val countAll = QueryHandler.countAllPosInGeoRec(bottomLeft, topRight)
+    val countAll = getFutureValue(QueryHandler.countAllPosInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countAll.totalCount == 1)
 
-    val countSS = QueryHandler.countStartAndStopInGeoRec(bottomLeft, topRight)
+    val countSS = getFutureValue(QueryHandler.countStartAndStopInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countSS.totalCount == 0)
   }
@@ -136,11 +138,11 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
     val bottomLeft = Position(48.6, -4.39)
     val topRight = Position(48.6996, -4.301)
 
-    val countAll = QueryHandler.countAllPosInGeoRec(bottomLeft, topRight)
+    val countAll = getFutureValue(QueryHandler.countAllPosInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countAll.totalCount == 2)
 
-    val countSS = QueryHandler.countStartAndStopInGeoRec(bottomLeft, topRight)
+    val countSS = getFutureValue(QueryHandler.countStartAndStopInGeoRec(GeoRec(bottomLeft, topRight)))
 
     assert(countSS.totalCount == 2)
 

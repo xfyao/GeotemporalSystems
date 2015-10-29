@@ -1,10 +1,10 @@
 package core.business
 
 import core.cache._
-import core.model.{Position, TripsSummary}
-import core.util.{AppLogger, FutureHelper, GeoHelper}
+import core.model._
+import core.util.{AppLogger, GeoHelper}
 
-import scala.collection.mutable
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
@@ -12,7 +12,9 @@ import scala.util.{Failure, Success}
 /**
  * Created by v962867 on 10/23/15.
  */
-object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
+case class ScanResult(positiveTrips: Seq[SimpleTrip], negativeTrips: Seq[SimpleTrip])
+
+object QueryHandler extends GeoHelper with AppLogger {
 
   /** scan the geohash index to find trips in this geo rec
     *
@@ -21,49 +23,65 @@ object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
     * (3) if the trip has been examined, skip it
     * (4) parallel processing of multiple geohashes is enabled by scala futures
     */
-  private def scanGeoHashAreas(listGeoHash: List[String], resultHash: mutable.HashMap[Int, Double], isBoundary: Boolean,
-                               isForStartAndStop: Boolean, bottomLeft: Position, topRight: Position): Unit = {
+  private def scanBoundaryGeoHashAreas(listGeoHash: Seq[String], prevScanResult: ScanResult, idGen: CacheIdGen,
+                                       geoRec: GeoRec): Future[ScanResult] = {
 
-    // HashSet to store local not passed positions to avoid duplicated processing as well
-    val nonResultHash = mutable.HashSet[Int]()
+    val resultHash: TrieMap[Int, SimpleTrip] = prevScanResult.positiveTrips.map(t =>
+      t.tripId -> t)(collection.breakOut)
+    val negativeResultHash: TrieMap[Int, SimpleTrip] = prevScanResult.negativeTrips.map(t =>
+      t.tripId -> t)(collection.breakOut)
 
     // introduce parallelism here; each future is to check one GeoHash Index
-    val futureList: List[Future[Unit]] = listGeoHash.map {geoHash =>
-      Redis.readFromGeoHash(geoHash, isForStartAndStop).map { tripSeq =>
-        isBoundary match {
-          case false =>
-            logger.debug(s"checking inner geohash: $geoHash $tripSeq $isForStartAndStop")
-            tripSeq.foreach ( trip =>
-              resultHash.put(trip.tripId, trip.fare)
-            )
-          case true =>
-            logger.debug(s"checking boundary geohash: $geoHash $tripSeq $isForStartAndStop")
-            tripSeq.filter(trip =>
-              // filter trips by (1) not processed yet and (2) has position in the geo rec
-              resultHash.contains(trip.tripId) || nonResultHash.contains(trip.tripId) match {
-                case true => false
-                case false =>
-                  // fetch positions for this trip
-                  val positions = isForStartAndStop match {
-                    case false => getFutureValue(Redis.getTripPositions(trip.tripId))
-                    case true =>
-                      val tripOpt = getFutureValue(Redis.getTrip(trip.tripId))
-                      var listPos = List[Position]()
-                      tripOpt.map{trip =>
-                        trip.startPos.map(v =>listPos +:= v)
-                        trip.stopPos.map(v =>listPos +:= v)}
-                      listPos
-                  }
-                  val inRec = hasPositionInRec(positions.toList, bottomLeft, topRight)
-                  inRec match {
-                    case false => nonResultHash.add(trip.tripId)
-                    case true =>
-                  }
-                  inRec
-              }).foreach( trip =>
-              resultHash.put(trip.tripId, trip.fare))
+    val futureList: Seq[Future[Unit]] = listGeoHash.map { geoHash =>
+
+      // fetch positions for this trip
+      def getPositions(trip: SimpleTrip): Future[Seq[Position]] = {
+        idGen.name match {
+          case AllPosIdGen.name =>
+            Redis.getTripPositions(trip.tripId)
+          case StartStopIdGen.name =>
+            Redis.getTrip(trip.tripId).map { tripOpt =>
+              tripOpt.map { trip =>
+                trip.startPos.map(List(_)).getOrElse(List[Position]()) :::
+                  trip.stopPos.map(List(_)).getOrElse(List[Position]())
+              }.getOrElse(List[Position]())
+            }
         }
-      }}
+      }
+
+      def examTrip(trip: SimpleTrip): Future[Option[SimpleTrip]] = {
+        // filter trips by (1) not processed yet and (2) has position in the geo rec
+        resultHash.contains(trip.tripId) || negativeResultHash.contains(trip.tripId) match {
+          case true => Future(None)
+          case false =>
+            // fetch positions for this trip and exame
+            getPositions(trip).map { positions =>
+              val inRec = hasPositionInRec(positions.toList, geoRec)
+              inRec match {
+                case false => negativeResultHash.putIfAbsent(trip.tripId, trip); None
+                case true => Some(trip)
+              }
+            }
+        }
+      }
+
+
+      def filterTrip(tripSeq: Seq[SimpleTrip]): Future[Seq[Option[SimpleTrip]]] = {
+        val all = tripSeq map examTrip
+        Future sequence all
+      }
+
+      for {
+        tripSeq <- Redis.readFromGeoHash(geoHash, idGen)
+        filteredTripSeq <- filterTrip(tripSeq)
+      } yield {
+        filteredTripSeq.foreach {
+          case Some(trip) =>
+            resultHash.putIfAbsent(trip.tripId, trip)
+          case None => // do nothing
+        }
+      }
+    }
 
     val futureOfList = Future.sequence(futureList)
 
@@ -72,8 +90,38 @@ object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
       case Failure(ex) => logger.error(s"scanning geohashes is failed: $listGeoHash",ex)
     }
 
-    // blocking here for all threads finished
-    getFutureValue(futureOfList)
+    futureOfList.map(_ => ScanResult(resultHash.values.toSeq, negativeResultHash.values.toSeq))
+  }
+
+  private def scanInnerGeoHashAreas(listGeoHash: Seq[String], prevScanResult: ScanResult, idGen: CacheIdGen,
+                                    geoRec: GeoRec): Future[ScanResult] = {
+
+    val resultHash: TrieMap[Int, SimpleTrip] = prevScanResult.positiveTrips.map(t =>
+      t.tripId -> t)(collection.breakOut)
+    val negativeResultHash: TrieMap[Int, SimpleTrip] = prevScanResult.negativeTrips.map(t =>
+      t.tripId -> t)(collection.breakOut)
+
+    // introduce parallelism here; each future is to check one GeoHash Index
+    val futureList: Seq[Future[Unit]] = listGeoHash.map { geoHash =>
+
+      for {
+        tripSeq <- Redis.readFromGeoHash(geoHash, idGen)
+      } yield {
+        logger.info(s"checking inner geohash: $geoHash $tripSeq")
+        tripSeq.foreach ( trip =>
+          resultHash.putIfAbsent(trip.tripId, trip)
+        )
+      }
+    }
+
+    val futureOfList = Future.sequence(futureList)
+
+    futureOfList onComplete {
+      case Success(x) => logger.info(s"scanning geohashes is done: $listGeoHash")
+      case Failure(ex) => logger.error(s"scanning geohashes is failed: $listGeoHash",ex)
+    }
+
+    futureOfList.map(_ => ScanResult(resultHash.values.toSeq, negativeResultHash.values.toSeq))
   }
 
   private def longestCommonPrefix(s1:String, s2:String): String = {
@@ -87,29 +135,27 @@ object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
     geoHashList.foldRight(geoHashList(0))((a,b) => longestCommonPrefix(a, b))
   }
 
-  private def getIndexedGeohashes(geoHashList: List[String], isForStartAndStop: Boolean): List[String] = {
+  private def getIndexedGeohashes(geoHashList: Seq[String], idGen: CacheIdGen): Future[Seq[String]] = {
 
     val precision = geoHashList.headOption.map(_.length).getOrElse(characterPrecision)
 
     precision match {
 
       case x if x < characterPrecision =>
-        val futureList: List[Future[Seq[String]]] = geoHashList.map{ geoHash =>
-          Redis.getGeoIndexKeys(geoHash, isForStartAndStop)
+        val futureList: Seq[Future[Seq[String]]] = geoHashList.map{ geoHash =>
+          Redis.getGeoIndexKeys(geoHash, idGen)
         }
-        val futureOfList: Future[List[Seq[String]]] = Future.sequence(futureList)
-
-        getFutureValue(futureOfList).map(hashSeq => hashSeq.toList).flatten
+        val futureOfList: Future[Seq[Seq[String]]] = Future.sequence(futureList)
+        futureOfList.map(_.flatten)
       case _ =>
-        geoHashList
+        Future(geoHashList)
     }
   }
 
-  private def countFinishedTripsInGeoRec(bottomLeft: Position, topRight: Position,
-                                         isForStartAndStop: Boolean): TripsSummary = {
+  private def countFinishedTripsInGeoRec(geoRec: GeoRec, idGen: CacheIdGen): Future[TripsSummary] = {
 
-    val geoHashList = getGeoHashListInRec(bottomLeft, topRight)
-    val boundaryGeoHashList = getBoundaryGeoHashListInRec(bottomLeft, topRight, geoHashList)
+    val geoHashList = getGeoHashListInRec(geoRec)
+    val boundaryGeoHashList = getBoundaryGeoHashListInRec(geoRec, geoHashList)
     val innerGeoHashList = geoHashList.filterNot(boundaryGeoHashList.contains(_))
 
     logger.info(s"check geoHashList: \n full - $geoHashList \n boundary - $boundaryGeoHashList " +
@@ -118,37 +164,36 @@ object QueryHandler extends GeoHelper with FutureHelper with AppLogger {
     // the geohash returned is scaled automatically based on the size of georec. For geohash with precision below 6,
     // we need to use "keys" command in Redis to find all smaller GeoHashes indexed in the particular geohash.
     // It can be done in parallelly.
-    val updatedBoundaryGeoHashList = getIndexedGeohashes(boundaryGeoHashList, isForStartAndStop)
-    val updatedInnerGeoHashList = getIndexedGeohashes(innerGeoHashList, isForStartAndStop)
+    val updatedBoundaryGeoHashList: Future[Seq[String]] = getIndexedGeohashes(boundaryGeoHashList, idGen)
+    val updatedInnerGeoHashList: Future[Seq[String]] = getIndexedGeohashes(innerGeoHashList, idGen)
 
-    // the hash to store and aggregate processed trips to avoid dupliated processing
-    val tripResultHash = mutable.HashMap[Int, Double]()
-
-    // To further optermize the performance, check the inner part of geohash grid first,
-    // where it is guaranted all trips are in the geo rec
-    scanGeoHashAreas(listGeoHash = updatedInnerGeoHashList, resultHash = tripResultHash, isBoundary = false,
-      isForStartAndStop = isForStartAndStop, bottomLeft = bottomLeft, topRight = topRight)
-
-    // scan the boundary geohash areas and pass in the previous scan result to avoid dupliated processing
-    scanGeoHashAreas(listGeoHash = updatedBoundaryGeoHashList, resultHash = tripResultHash, isBoundary = true,
-      isForStartAndStop = isForStartAndStop, bottomLeft = bottomLeft, topRight = topRight)
-
-    val totalFare = tripResultHash.foldRight(0.0)((a,b) => a._2 + b)
-    val totalCount = tripResultHash.size
-
-    TripsSummary(totalCount, totalFare)
+    for {
+      innerList <- updatedInnerGeoHashList
+      scanResult <- scanInnerGeoHashAreas(innerList, ScanResult(List(), List()), idGen, geoRec)
+      boundaryList <- updatedBoundaryGeoHashList
+      scanResult2 <- scanBoundaryGeoHashAreas(boundaryList, scanResult, idGen, geoRec)
+    } yield {
+      // we should use scala fold operation here. When List size reaches 10k, the stack overflow error will happen
+      var total = 0.0
+      var count = 0
+      for(trip <- scanResult2.positiveTrips) {
+        total += trip.fare
+        count += 1
+      }
+      TripsSummary(count, total)
+    }
   }
 
   /* count all trips occured in this geo rec */
-  def countAllPosInGeoRec(bottomLeft: Position, topRight: Position): TripsSummary = {
+  def countAllPosInGeoRec(geoRec: GeoRec): Future[TripsSummary] = {
 
-    countFinishedTripsInGeoRec(bottomLeft, topRight, false)
+    countFinishedTripsInGeoRec(geoRec, AllPosIdGen)
   }
 
   /* count all trips with start and/or postion in this geo rec */
-  def countStartAndStopInGeoRec(bottomLeft: Position, topRight: Position): TripsSummary = {
+  def countStartAndStopInGeoRec(geoRec: GeoRec): Future[TripsSummary] = {
 
-    countFinishedTripsInGeoRec(bottomLeft, topRight, true)
+    countFinishedTripsInGeoRec(geoRec, StartStopIdGen)
   }
 
   /* count all occuring trips */

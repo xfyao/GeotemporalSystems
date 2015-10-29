@@ -1,7 +1,7 @@
 package core.actors
 
 import akka.actor.{Actor, ActorLogging}
-import core.cache.Redis
+import core.cache.{StartStopIdGen, Redis}
 import core.model.{SimpleTrip, Trip}
 import core.util.{AppLogger, FutureHelper, GeoHelper}
 
@@ -20,12 +20,12 @@ class BuildStartStopGeoCacheActor extends Actor with ActorLogging with GeoHelper
     case BuildStartStopGeoCacheMsg(trip) =>
       val startFutureOpt = trip.startPos.map { pos =>
         val geoHashStr = geoHash(pos.lat, pos.lng)
-        Redis.addToGeoHash(geoHashStr, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), true)
+        Redis.addToGeoHash(geoHashStr, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), StartStopIdGen)
       }
 
       val stopFutureOpt = trip.stopPos.map { pos =>
         val geoHashStr = geoHash(pos.lat, pos.lng)
-        Redis.addToGeoHash(geoHashStr, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), true)
+        Redis.addToGeoHash(geoHashStr, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), StartStopIdGen)
       }
 
       // blocking here to wait threads to finish

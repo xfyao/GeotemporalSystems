@@ -1,6 +1,6 @@
 package core.business
 
-import core.cache.Redis
+import core.cache.{AllPosIdGen, StartStopIdGen, Redis}
 import core.model.{Position, Event}
 import core.util.{GeoHelper, FutureHelper}
 import net.liftweb.json._
@@ -192,7 +192,7 @@ class Controller$Test extends FunSuite with GeoHelper with FutureHelper {
     val geoHashAny = geoHash(updatePos.lat, updatePos.lng)
     println("geoHashAny = " + geoHashAny)
 
-    val tripPositionsSeq = getFutureValue(Redis.readFromGeoHash(geoHashAny, false))
+    val tripPositionsSeq = getFutureValue(Redis.readFromGeoHash(geoHashAny, AllPosIdGen))
     assert(tripPositionsSeq.size >= 1)
     assert(tripPositionsSeq.head.tripId == tripId)
 
@@ -201,7 +201,7 @@ class Controller$Test extends FunSuite with GeoHelper with FutureHelper {
     val geoHashBegin = geoHash(beginPos.lat, beginPos.lng)
     println("geoHashBegin = " + geoHashBegin)
 
-    val tripStartSeq = getFutureValue(Redis.readFromGeoHash(geoHashBegin, true))
+    val tripStartSeq = getFutureValue(Redis.readFromGeoHash(geoHashBegin, StartStopIdGen))
     assert(tripStartSeq.size >= 1)
     assert(tripStartSeq.head.tripId == tripId)
 
@@ -209,7 +209,7 @@ class Controller$Test extends FunSuite with GeoHelper with FutureHelper {
     val geoHashEnd = geoHash(endPos.lat, endPos.lng).toString
     println("geoHashEnd = " + geoHashEnd)
 
-    val tripStopSeq = getFutureValue(Redis.readFromGeoHash(geoHashEnd, true))
+    val tripStopSeq = getFutureValue(Redis.readFromGeoHash(geoHashEnd, StartStopIdGen))
     assert(tripStopSeq.size >= 1)
     assert(tripStopSeq.head.tripId == tripId)
 

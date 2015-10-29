@@ -1,10 +1,9 @@
 package core.actors
 
 import akka.actor.{Actor, ActorLogging}
-import core.cache.Redis
+import core.cache.{AllPosIdGen, Redis}
 import core.model.{SimpleTrip, Trip}
 import core.util.{AppLogger, FutureHelper, GeoHelper}
-import org.slf4j.LoggerFactory
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -26,7 +25,7 @@ class GeoIndexFinishedTripActor extends Actor with ActorLogging with GeoHelper w
 
       // introduce parallelism here
       val futureList: List[Future[Long]] = geoGroup.map { case (hashKey, listPos) =>
-        Redis.addToGeoHash(hashKey, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), false)}.toList
+        Redis.addToGeoHash(hashKey, SimpleTrip(trip.tripId, trip.fare.getOrElse(0)), AllPosIdGen)}.toList
 
       val futureOfList = Future.sequence(futureList)
 
