@@ -2,10 +2,10 @@ package core.cache
 
 import core.model._
 import core.util.{ServerConfig, CacheLogger}
+import core.util.ThreadPool.ec
 import redis.clients.jedis.{JedisPool, JedisPoolConfig}
 
 import scala.collection.JavaConversions._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 /**

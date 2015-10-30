@@ -3,9 +3,9 @@ package core.business
 import core.cache._
 import core.model._
 import core.util.{AppLogger, GeoHelper}
+import core.util.ThreadPool.ec
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 

@@ -2,7 +2,8 @@ package core.util
 
 import redis.RedisClient
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import core.util.ThreadPool.ec
+
 import scala.concurrent.duration._
 import scala.language.postfixOps
 

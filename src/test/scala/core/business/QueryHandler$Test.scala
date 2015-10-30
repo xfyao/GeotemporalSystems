@@ -55,10 +55,11 @@ class QueryHandler$Test extends FunSuite with PrivateMethodTester with GeoHelper
   val event3 = Event(event="end", tripId=910, lat=48.614, lng = -4.363, fare = Some(12.5), epoch = 1392864673240L)
 
   Controller.addEvent(event1)
+  Thread.sleep(500)
   Controller.addEvent(event2)
+  Thread.sleep(500)
   Controller.addEvent(event3)
-
-  Thread.sleep(1000)
+  Thread.sleep(500)
 
   test("test counting - in the georec - both AllPos and StartAndStop") {
 

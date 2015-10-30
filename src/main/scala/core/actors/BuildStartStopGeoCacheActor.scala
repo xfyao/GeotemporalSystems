@@ -4,8 +4,8 @@ import akka.actor.{Actor, ActorLogging}
 import core.cache.{StartStopIdGen, Redis}
 import core.model.{SimpleTrip, Trip}
 import core.util.{AppLogger, FutureHelper, GeoHelper}
+import core.util.ThreadPool.ec
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 
 /**
